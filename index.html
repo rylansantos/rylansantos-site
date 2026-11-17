@@ -49,11 +49,11 @@ a:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
 .colophon { margin-top: 3.2rem; font-size: .8rem; font-style: italic; color: #857c6c; }
 .colophon .w { color: inherit; }
 
-/* the collage: torn Monet diamonds on a diagonal lattice (placed by the script, clear of the text) */
+/* the collage: torn Monet pieces overlapping along diagonals (placed by the script, clear of the text) */
 .piece {
   position: absolute; z-index: 1; margin: 0;
   --px: 0px; --py: 0px;
-  transform: translate(var(--px), var(--py));
+  transform: translate(var(--px), var(--py)) rotate(var(--r, 0deg));
   mix-blend-mode: multiply;
   filter: drop-shadow(0 6px 10px rgba(60, 45, 20, .16));
 }
@@ -253,39 +253,45 @@ body.live .dot, body.live .ring { opacity: 1; }
   templates.forEach(t => t.remove());
   const pieces = [];
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const torn = () => {   // a diamond with slightly ragged edges
-    const c = [[50, 0], [100, 50], [50, 100], [0, 50], [50, 0]], pts = [];
-    for (let e = 0; e < 4; e++) for (let i = 0; i < 6; i++) {
-      const t = i / 6, j = (rnd() - .5) * 2.4;
-      pts.push(`${(c[e][0] + (c[e + 1][0] - c[e][0]) * t + j).toFixed(1)}% ${(c[e][1] + (c[e + 1][1] - c[e][1]) * t + j).toFixed(1)}%`);
-    }
+  const torn = () => {   // a rectangle with ragged, wavy edges
+    const e = () => (rnd() * 2.4).toFixed(1), pts = [];
+    for (let i = 0; i < 12; i++) pts.push(`${(i * 100 / 12).toFixed(1)}% ${e()}%`);
+    for (let i = 0; i < 12; i++) pts.push(`${(100 - e()).toFixed(1)}% ${(i * 100 / 12).toFixed(1)}%`);
+    for (let i = 0; i < 12; i++) pts.push(`${(100 - i * 100 / 12).toFixed(1)}% ${(100 - e()).toFixed(1)}%`);
+    for (let i = 0; i < 12; i++) pts.push(`${e()}% ${(100 - i * 100 / 12).toFixed(1)}%`);
     return `polygon(${pts.join(',')})`;
   };
   const layout = () => {
     sheet.querySelectorAll('.piece').forEach(f => f.remove());
     pieces.length = 0; seed = 7;
     const W = sheet.clientWidth, H = sheet.offsetHeight, sr = sheet.getBoundingClientRect();
-    const d = Math.max(84, Math.min(170, W * 0.1));        // diamond width and height
-    const pitch = d * 1.22, edge = 10, pad = 22;
+    const u = Math.max(80, Math.min(150, W * 0.085));     // lattice step: pieces sit on diagonals u apart
+    const edge = 12, pad = 22;
     const avoid = [...mainEl.children].filter(el => el.offsetWidth).map(el => {
       const r = el.getBoundingClientRect();
       return { l: r.left - sr.left - pad, t: r.top - sr.top - pad, r: r.right - sr.left + pad, b: r.bottom - sr.top + pad };
     });
     const g = document.getElementById('globe');
     if (g) { const r = g.getBoundingClientRect(); avoid.push({ l: r.left - sr.left - pad, t: r.top - sr.top - pad, r: r.right - sr.left + pad, b: r.bottom - sr.top + pad }); }
-    const cols = Math.floor((W - 2 * edge - d) / pitch);
-    const x0 = (W - cols * pitch) / 2;
-    let n = 0;
-    for (let row = 0, y = edge + d / 2; y + d / 2 <= H - edge; row++, y += pitch / 2) {
-      for (let x = x0 + (row % 2) * pitch / 2; x <= W - edge - d / 2 + .5; x += pitch) {
-        const box = { l: x - d / 2, t: y - d / 2, r: x + d / 2, b: y + d / 2 };
-        if (box.l < edge - .5) continue;
+    // diagonal stripes running top-left to bottom-right; along each stripe the pieces overlap like a chain
+    const step = u * 0.8, spacing = u * 2.6;
+    let n = 0, stripe = 0;
+    for (let c = -H + ((W + H) % spacing) / 2; c < W; c += spacing, stripe++) {
+      for (let t = 0; ; t += step) {
+        const x = c + t / Math.SQRT2 + (rnd() - .5) * u * 0.12, y = t / Math.SQRT2 + (rnd() - .5) * u * 0.12;
+        if (y > H || x > W + u) break;
+        const w = u * (1.15 + rnd() * 0.3), h = u * (0.85 + rnd() * 0.3), r = (rnd() - .5) * 12;
+        const cs = Math.abs(Math.cos(r * Math.PI / 180)), sn = Math.abs(Math.sin(r * Math.PI / 180));
+        const bw = w * cs + h * sn, bh = w * sn + h * cs;
+        const box = { l: x - bw / 2, t: y - bh / 2, r: x + bw / 2, b: y + bh / 2 };
+        if (box.l < edge || box.r > W - edge || box.t < edge || box.b > H - edge) continue;
         if (avoid.some(a => a.l < box.r && a.r > box.l && a.t < box.b && a.b > box.t)) continue;
         const f = templates[n++ % templates.length].cloneNode(true);
-        Object.assign(f.style, { left: box.l + 'px', top: box.t + 'px', width: d + 'px', height: d + 'px' });
+        Object.assign(f.style, { left: (x - w / 2) + 'px', top: (y - h / 2) + 'px', width: w + 'px', height: h + 'px' });
+        f.style.setProperty('--r', r.toFixed(1) + 'deg');
         f.firstElementChild.style.clipPath = torn();
         sheet.appendChild(f);
-        pieces.push({ el: f, d: 4 + Math.round(rnd() * 8), x: 0, y: 0 });
+        pieces.push({ el: f, d: 4 + Math.round(rnd() * 10), x: 0, y: 0 });
       }
     }
   };
