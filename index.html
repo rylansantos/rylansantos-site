@@ -262,16 +262,25 @@ body.live .dot, body.live .ring { opacity: 1; }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
 
   const pieces = [...document.querySelectorAll('.piece')].map(el => ({ el, d: +el.dataset.d || 0, x: 0, y: 0 }));
-  // the bottom strips only show when they land on the first screen without covering the text
+  // the bottom strips always show: they sit on the bottom edge of the first screen, shrinking to fit
+  // under the text; if even that is too tight, they sit just below the text instead
   const strips = [...document.querySelectorAll('.b2, .b3, .b4')];
   const fitStrips = () => {
-    const text = [...document.querySelectorAll('main > *')].map(e => e.getBoundingClientRect());
+    strips.forEach(el => { el.style.top = ''; el.style.bottom = ''; el.style.height = ''; });
+    const sheetEl = document.querySelector('.sheet'); sheetEl.style.minHeight = '';
+    if (innerWidth <= 820) return;                          // phones scroll anyway: keep the plain layout
+    const textBottom = Math.max(...[...document.querySelectorAll('main > *')].map(e => e.getBoundingClientRect().bottom)) + scrollY;
+    const gap = 14, bleed = innerHeight * 0.015;
+    const h0 = Math.max(...strips.map(el => el.offsetHeight));
+    const room = innerHeight + bleed - textBottom - gap - h0 * 0.12;   // tilt adds a little height
+    const scale = Math.min(1, room / h0);
     strips.forEach(el => {
-      el.style.visibility = '';
-      const r = el.getBoundingClientRect();
-      const hitsText = text.some(t => t.left < r.right && t.right > r.left && t.top < r.bottom && t.bottom > r.top);
-      el.style.visibility = hitsText || (innerWidth > 820 && r.top + scrollY > innerHeight - r.height * 0.5) ? 'hidden' : '';
+      const h = el.offsetHeight * (scale >= 0.6 ? scale : 1);
+      el.style.height = h + 'px';
+      el.style.bottom = 'auto';
+      el.style.top = (scale >= 0.6 ? innerHeight + bleed - h : textBottom + gap + h0 * 0.06) + 'px';
     });
+    if (scale < 0.6) sheetEl.style.minHeight = (textBottom + gap + h0 * 1.3) + 'px';
   };
   fitStrips(); addEventListener('resize', fitStrips);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitStrips);
